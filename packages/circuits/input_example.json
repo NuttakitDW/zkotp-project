@@ -1,0 +1,9 @@
+{
+    "secret": "",
+    "otp_code": "",
+    "hashed_secret": "",
+    "hashed_otp": "",
+    "time_step": "",
+    "action_hash": "",
+    "tx_nonce": ""
+}
