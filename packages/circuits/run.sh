@@ -14,6 +14,7 @@ snarkjs powersoftau prepare phase2 pot12_0001.ptau pot12_0002.ptau -v
 snarkjs groth16 setup totp.r1cs pot12_0002.ptau totp_0000.zkey
 snarkjs zkey contribute totp_0000.zkey totp_0001.zkey --name="Second contribution" -v
 snarkjs zkey export verificationkey totp_0001.zkey verification_key.json
+snarkjs zkey export solidityverifier totp_0001.zkey verifier.sol
 
 # 5) Generate witness
 cd totp_js
@@ -25,9 +26,6 @@ snarkjs groth16 prove totp_0001.zkey witness.wtns proof.json public.json
 
 # 7) Verify
 snarkjs groth16 verify verification_key.json public.json proof.json
-
-# 8) Export Solidity verifier
-snarkjs zkey export solidityverifier totp_0001.zkey verifier.sol
 
 
 #chmod +x run.sh
