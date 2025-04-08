@@ -26,5 +26,9 @@ snarkjs groth16 prove totp_0001.zkey witness.wtns proof.json public.json
 # 7) Verify
 snarkjs groth16 verify verification_key.json public.json proof.json
 
+# 8) Export Solidity verifier
+snarkjs zkey export solidityverifier totp_0001.zkey verifier.sol
+
+
 #chmod +x run.sh
 #./run.sh
