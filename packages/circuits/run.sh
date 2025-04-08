@@ -25,3 +25,6 @@ snarkjs groth16 prove totp_0001.zkey witness.wtns proof.json public.json
 
 # 7) Verify
 snarkjs groth16 verify verification_key.json public.json proof.json
+
+#chmod +x run.sh
+#./run.sh
