@@ -16,3 +16,7 @@ witness.wtns
 # but prefer ignoring intermediate ones:
 totp_0000.zkey
 totp_0001.zkey
+
+proof.json
+public.json
+verification_key.json
