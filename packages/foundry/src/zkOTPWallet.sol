@@ -82,6 +82,11 @@ contract zkOTPWallet {
         _;
     }
 
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "Not admin");
+        _;
+    }
+
     /**
      * @notice Sets a new owner. Only the current owner can call this.
      * @param _newOwner The new owner address.
@@ -97,7 +102,7 @@ contract zkOTPWallet {
      * @notice Sets a new admin. Only the current owner can call this.
      * @param _newAdmin The new admin address (can be zero if you want no admin).
      */
-    function setAdmin(address _newAdmin) external onlyOwner {
+    function setAdmin(address _newAdmin) external onlyAdmin {
         address oldAdmin = admin;
         admin = _newAdmin;
         emit AdminChanged(oldAdmin, _newAdmin);
