@@ -1,19 +1,18 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+import { initializeApp } from "firebase-admin/app";
+import { onRequest } from "firebase-functions/v2/https";
+import { setGlobalOptions } from "firebase-functions/v2";
 
-const {onRequest} = require("firebase-functions/v2/https");
-const logger = require("firebase-functions/logger");
+// Initialize Firebase Admin if needed
+initializeApp();
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
+// Set global region (and optionally other options)
+setGlobalOptions({
+    region: "asia-southeast1",
+    // e.g. memory: "512MiB",
+    // e.g. timeoutSeconds: 60,
+});
 
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+// Example: An HTTPS function
+export const helloWorld = onRequest((req, res) => {
+    res.send("Hello from Singapore region!");
+});
