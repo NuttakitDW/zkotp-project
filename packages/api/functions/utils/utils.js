@@ -2,7 +2,7 @@ import * as circomlibjs from "circomlibjs";
 import { ethers } from "ethers";
 import * as snarkjs from 'snarkjs';
 import fs from 'fs';
-
+import base32 from "base32.js";
 
 /**
  * Computes the Poseidon hash of the given input field.
@@ -29,6 +29,18 @@ export async function computePoseidonHash(xField) {
  */
 export function computeActionHash(to, value, data) {
     // Use ethers.utils.solidityPack to mimic abi.encodePacked
+    if (!to || !value || !data) {
+        throw new Error("Invalid input: 'to', 'value', and 'data' must be non-empty.");
+    }
+
+    if (!ethers.utils.isAddress(to)) {
+        throw new Error(`Invalid Ethereum address: ${to}`);
+    }
+
+    if (typeof value !== "string" && typeof value !== "number") {
+        throw new Error(`Invalid value type: ${typeof value}. Expected string or number.`);
+    }
+
     const encoded = ethers.utils.solidityPack(
         ["address", "uint256", "bytes"],
         [to, value, data]
@@ -41,39 +53,129 @@ export function computeActionHash(to, value, data) {
 }
 
 /**
- * Encrypts data with a salt.
- * @param {string} data - The data to encrypt.
- * @param {string} salt - The salt to use for encryption.
- * @returns {string} - The encrypted data in base64 format.
+ * Encrypts the given plaintext using:
+ *   - process.env.ENCRYPTION_WORD (the "password")
+ *   - a 'salt' (Buffer or string)
+ *   - AES-GCM (or another algorithm specified by process.env.ENCRYPTION_ALGORITHM)
+ *   - PBKDF2 (100000 iterations, 32-byte key length, sha256)
+ *
+ * Returns a single string containing:
+ *   "IV(base64):ciphertext(base64):authTag(base64)"
  */
-export function encryptWithSalt(data, salt) {
-    const iv = crypto.randomBytes(IV_LENGTH); // Generate a random IV
-    const key = crypto.pbkdf2Sync(KEY, salt, 100000, 32, "sha256"); // Derive a key using the salt
+export function encryptWithSalt(plaintext, salt) {
+    // 1) Check required ENV variables
+    const password = process.env.ENCRYPTION_WORD;
+    if (!password) {
+        throw new Error("ENCRYPTION_WORD is not defined in the environment variables");
+    }
 
-    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-    let encrypted = cipher.update(data, "utf8", "base64");
-    encrypted += cipher.final("base64");
+    const algorithm = process.env.ENCRYPTION_ALGORITHM;
+    if (!algorithm) {
+        throw new Error("ENCRYPTION_ALGORITHM is not defined in the environment variables");
+    }
 
-    return `${iv.toString("base64")}:${encrypted}`; // Return IV and encrypted data
+    // 2) Validate plaintext
+    if (typeof plaintext !== "string" || plaintext.length === 0) {
+        throw new TypeError("The 'plaintext' argument must be a non-empty string.");
+    }
+
+    // 3) Normalize salt
+    // If salt is a string, convert it to a Buffer. Otherwise, assume it's already a Buffer.
+    const saltBuffer = Buffer.isBuffer(salt) ? salt : Buffer.from(salt, 'utf8');
+
+    // 4) Derive key using PBKDF2
+    //  - 100000 iterations, 32 bytes, sha256
+    const key = crypto.pbkdf2Sync(password, saltBuffer, 100000, 32, 'sha256');
+
+    // 5) Generate a random IV
+    //  - For AES-GCM, 12 bytes is typical
+    const iv = crypto.randomBytes(12);
+
+    // 6) Create the Cipher
+    const cipher = crypto.createCipheriv(algorithm, key, iv);
+
+    // 7) Encrypt
+    let encrypted = cipher.update(plaintext, 'utf8', 'base64');
+    encrypted += cipher.final('base64');
+
+    // 8) Get auth tag (required for AES-GCM)
+    //  - If you use AES-CBC or another non-AEAD mode, there's no authTag
+    let authTag = '';
+    if (algorithm.includes('gcm')) {
+        authTag = cipher.getAuthTag().toString('base64');
+    }
+
+    // 9) Return a single string with IV, ciphertext, and tag
+    //    If you don't store the tag, GCM decryption won't work
+    return `${iv.toString('base64')}:${encrypted}:${authTag}`;
 }
 
 /**
- * Decrypts data with a salt.
- * @param {string} encryptedData - The encrypted data in base64 format.
- * @param {string} salt - The salt used for encryption.
- * @returns {string} - The decrypted data.
+ * Decrypts data produced by encryptWithSalt(), reconstructing the same key from:
+ *   - process.env.ENCRYPTION_WORD (the "password")
+ *   - the same 'salt'
+ *   - the same PBKDF2 parameters
+ *   - the same algorithm (e.g., aes-256-gcm)
+ *
+ * Expects 'encryptedString' in the format "IV:ciphertext:authTag" (all base64).
+ *
+ * Returns the original plaintext as a UTF-8 string.
  */
-export function decryptWithSalt(encryptedData, salt) {
-    const [ivBase64, encrypted] = encryptedData.split(":");
-    const iv = Buffer.from(ivBase64, "base64");
-    const key = crypto.pbkdf2Sync(KEY, salt, 100000, 32, "sha256"); // Derive the key using the salt
+export function decryptWithSalt(encryptedString, salt) {
+    // 1) Check required ENV variables
+    const password = process.env.ENCRYPTION_WORD;
+    if (!password) {
+        throw new Error("ENCRYPTION_WORD is not defined in the environment variables");
+    }
 
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    let decrypted = decipher.update(encrypted, "base64", "utf8");
-    decrypted += decipher.final("utf8");
+    const algorithm = process.env.ENCRYPTION_ALGORITHM;
+    if (!algorithm) {
+        throw new Error("ENCRYPTION_ALGORITHM is not defined in the environment variables");
+    }
 
+    // 2) Validate input string
+    if (typeof encryptedString !== 'string' || encryptedString.length === 0) {
+        throw new TypeError("The 'encryptedString' argument must be a non-empty string.");
+    }
+
+    // 3) Split into parts: IV, ciphertext, authTag
+    const parts = encryptedString.split(':');
+    if (parts.length < 2) {
+        throw new Error("Encrypted string format invalid. Expected 'IV:ciphertext[:authTag]'.");
+    }
+
+    const [ivBase64, ciphertextBase64, authTagBase64 = ''] = parts;
+
+    // 4) Normalize salt
+    const saltBuffer = Buffer.isBuffer(salt) ? salt : Buffer.from(salt, 'utf8');
+
+    // 5) Derive the same key (PBKDF2)
+    const key = crypto.pbkdf2Sync(password, saltBuffer, 100000, 32, 'sha256');
+
+    // 6) Convert IV from base64 to Buffer
+    const iv = Buffer.from(ivBase64, 'base64');
+
+    // 7) Create the Decipher
+    const decipher = crypto.createDecipheriv(algorithm, key, iv);
+
+    // 8) If using GCM, set the auth tag
+    if (algorithm.includes('gcm')) {
+        if (!authTagBase64) {
+            throw new Error("No authTag provided for GCM decryption.");
+        }
+        const authTag = Buffer.from(authTagBase64, 'base64');
+        decipher.setAuthTag(authTag);
+    }
+
+    // 9) Decrypt
+    let decrypted = decipher.update(ciphertextBase64, 'base64', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    // 10) Return plaintext
     return decrypted;
 }
+
+
 
 /**
  * Pads a Base32 string with the required number of "=" characters to make its length a multiple of 8.
@@ -118,6 +220,20 @@ export function computeTOTP6(secretBytes, timeStep) {
 }
 
 /**
+ * Converts a byte array to a BigInt using big-endian encoding.
+ *
+ * @param {Uint8Array} bytes - The byte array to convert.
+ * @returns {bigint} - The resulting BigInt.
+ */
+export function bytesToBigIntBE(bytes) {
+    let x = 0n;
+    for (const b of bytes) {
+        x = (x << 8n) + BigInt(b);
+    }
+    return x;
+}
+
+/**
  * Generates a proof object from the given input parameters.
  *
  * @param {Object} input - The input object containing the required fields.
@@ -130,28 +246,39 @@ export function computeTOTP6(secretBytes, timeStep) {
  * @param {string} input.txNonce - The transaction nonce.
  * @returns {Object} - The proof object containing the input fields.
  */
-export async function generateProof(input) {
+export async function generateZKProof(input) {
 
     // Validate required fields from input
     if (!input.secret || !input.computedOtp || !input.hashedSecret || !input.hashedOtp || !input.timeStep || !input.actionHash || !input.txNonce) {
         throw new Error("Missing required fields in input");
     }
 
-    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-        {
-            secret: input.secret,
-            otp_code: input.computedOtp,
-            hashed_secret: input.hashedSecret,
-            hashed_otp: input.hashedOtp,
-            time_step: input.timeStep,
-            action_hash: input.actionHash,
-            tx_nonce: input.txNonce
-        },
-        "../../circuits/totp_js/totp.wasm",
-        "../../circuits/totp_0001.zkey"
-    );
+    let proof, publicSignals;
+    try {
+        const result = await snarkjs.groth16.fullProve(
+            {
+                secret: input.secret,
+                otp_code: input.computedOtp,
+                hashed_secret: input.hashedSecret,
+                hashed_otp: input.hashedOtp,
+                time_step: input.timeStep,
+                action_hash: input.actionHash,
+                tx_nonce: input.txNonce
+            },
+            "../../circuits/totp_js/totp.wasm",
+            "../../circuits/totp_0001.zkey"
+        );
+        proof = result.proof;
+        publicSignals = result.publicSignals;
+    } catch (error) {
+        console.error("Error during proof generation in 'snarkjs.groth16.fullProve':", error);
+        throw new Error(`Proof generation failed in 'snarkjs.groth16.fullProve': ${error.message}`);
+    }
 
-    await verifyProof(proof, publicSignals);
+    const isValid = await verifyProof(proof, publicSignals);
+    if (!isValid) {
+        throw new Error("Proof verification failed.");
+    }
 
     const solidityCalldata = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals)
     const finalProofObject = parseSolidityCallData(solidityCalldata);
@@ -159,55 +286,15 @@ export async function generateProof(input) {
     return finalProofObject;
 }
 
-/**
- * Decrypts an encrypted secret using a salt.
- * This function assumes the secret was encrypted using AES-256-CBC with a derived key.
- *
- * @param {string} encryptedSecret - The encrypted secret in base64 format (format: "IV:encryptedData").
- * @param {string} salt - The salt used during encryption to derive the key.
- * @returns {string} - The decrypted secret as a UTF-8 string.
- */
-export function decryptSecret(encryptedSecret, salt) {
-    // Split the encrypted secret into IV and encrypted data
-    const [ivBase64, encryptedData] = encryptedSecret.split(":");
-    if (!ivBase64 || !encryptedData) {
-        throw new Error("Invalid encrypted secret format");
-    }
-
-    // Convert IV from base64 to a Buffer
-    const iv = Buffer.from(ivBase64, "base64");
-
-    // Derive the encryption key using PBKDF2 with the provided salt
-    const key = crypto.pbkdf2Sync(process.env.ENCRYPTION_KEY, salt, 100000, 32, "sha256");
-
-    // Create a decipher instance with AES-256-CBC
-    const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv);
-
-    // Decrypt the data
-    let decrypted = decipher.update(encryptedData, "base64", "utf8");
-    decrypted += decipher.final("utf8");
-
-    return decrypted;
-}
-
 // Function to verify the proof
 async function verifyProof(proof, publicSignals) {
-    try {
-        // Read the verification key from a JSON file
-        const verificationKeyFile = '../../circuits/verification_key.json'; // Path to your verification key file
-        const verificationKey = JSON.parse(fs.readFileSync(verificationKeyFile, 'utf8'));
+    // Read the verification key from a JSON file
+    const verificationKeyFile = '../../circuits/verification_key.json'; // Path to your verification key file
+    const verificationKey = JSON.parse(fs.readFileSync(verificationKeyFile, 'utf8'));
 
-        // Use snarkjs to verify the proof
-        const isValid = await snarkjs.groth16.verify(verificationKey, publicSignals, proof);
-
-        if (isValid) {
-            console.log("Proof is valid!");
-        } else {
-            console.log("Proof is invalid.");
-        }
-    } catch (error) {
-        console.error("Error in Verification Phase:", error);
-    }
+    // Use snarkjs to verify the proof
+    const isValid = await snarkjs.groth16.verify(verificationKey, publicSignals, proof);
+    return isValid;
 }
 
 
@@ -232,4 +319,15 @@ function parseSolidityCallData(calldataString) {
 
     // 5) Build a final object
     return { a, b, c, publicInput };
+}
+
+/**
+ * Decodes a Base32-encoded string into a Uint8Array.
+ *
+ * @param {string} b32str - The Base32-encoded string to decode.
+ * @returns {Uint8Array} - The decoded data as a Uint8Array.
+ */
+export function base32Decode(b32str) {
+    const decoder = new base32.Decoder();
+    return new Uint8Array(decoder.write(b32str).finalize());
 }
