@@ -1,7 +1,6 @@
 import * as circomlibjs from "circomlibjs";
 import { ethers } from "ethers";
-import crypto from "crypto";
-const snarkjs = require('snarkjs')
+import * as snarkjs from 'snarkjs';
 
 
 
@@ -159,15 +158,46 @@ export async function generateProof(input) {
         decToHex(proof.pi_c[1])
     ];
 
-    const input = pub.map(decToHex);
+    const publicInput = pub.map(decToHex);
 
     const finalProofObject = {
         a,
         b,
         c,
-        input
+        publicInput
     };
 
 
     return finalProofObject;
+}
+
+/**
+ * Decrypts an encrypted secret using a salt.
+ * This function assumes the secret was encrypted using AES-256-CBC with a derived key.
+ *
+ * @param {string} encryptedSecret - The encrypted secret in base64 format (format: "IV:encryptedData").
+ * @param {string} salt - The salt used during encryption to derive the key.
+ * @returns {string} - The decrypted secret as a UTF-8 string.
+ */
+export function decryptSecret(encryptedSecret, salt) {
+    // Split the encrypted secret into IV and encrypted data
+    const [ivBase64, encryptedData] = encryptedSecret.split(":");
+    if (!ivBase64 || !encryptedData) {
+        throw new Error("Invalid encrypted secret format");
+    }
+
+    // Convert IV from base64 to a Buffer
+    const iv = Buffer.from(ivBase64, "base64");
+
+    // Derive the encryption key using PBKDF2 with the provided salt
+    const key = crypto.pbkdf2Sync(process.env.ENCRYPTION_KEY, salt, 100000, 32, "sha256");
+
+    // Create a decipher instance with AES-256-CBC
+    const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv);
+
+    // Decrypt the data
+    let decrypted = decipher.update(encryptedData, "base64", "utf8");
+    decrypted += decipher.final("utf8");
+
+    return decrypted;
 }
