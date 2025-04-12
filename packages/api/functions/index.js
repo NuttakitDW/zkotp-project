@@ -16,11 +16,6 @@ setGlobalOptions({
     region: "asia-southeast1",
 });
 
-// Example: An HTTPS function
-export const helloWorld = onRequest((req, res) => {
-    res.send("Hello from Singapore region!");
-});
-
 // generate proof function
 export const generateProof = onRequest(async (req, res) => {
     const { uid, otp, to, value, data } = req.body;
