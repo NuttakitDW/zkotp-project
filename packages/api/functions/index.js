@@ -57,13 +57,13 @@ export const generateProof = onRequest(async (req, res) => {
     const txNonce = Math.floor(Math.random() * 1000000);
 
     const input = {
-        secret,
-        computedOtp,
-        hashedSecret,
-        hashedOtp,
-        timeStep,
-        actionHash,
-        txNonce,
+        secret: secret.toString(),
+        computedOtp: computedOtp.toString(),
+        hashedSecret: hashedSecret.toString(),
+        hashedOtp: hashedOtp.toString(),
+        timeStep: timeStep.toString(),
+        actionHash: actionHash.toString(),
+        txNonce: txNonce.toString(),
     };
 
     const proof = await generateProof(input);

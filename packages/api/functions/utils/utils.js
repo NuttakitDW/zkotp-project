@@ -1,7 +1,17 @@
 import * as circomlibjs from "circomlibjs";
 import { ethers } from "ethers";
 import * as snarkjs from 'snarkjs';
+import fs from 'fs';
 
+/**
+ * Converts a decimal number to a hexadecimal string with a "0x" prefix.
+ *
+ * @param {number} num - The decimal number to convert.
+ * @returns {string} - The hexadecimal representation of the number.
+ */
+export function decToHex(num) {
+    return "0x" + BigInt(num).toString(16);
+}
 
 
 /**
@@ -122,12 +132,12 @@ export function computeTOTP6(secretBytes, timeStep) {
  *
  * @param {Object} input - The input object containing the required fields.
  * @param {string} input.secret - The secret key.
- * @param {number} input.computedOtp - The computed OTP.
+ * @param {string} input.computedOtp - The computed OTP.
  * @param {string} input.hashedSecret - The hashed secret.
  * @param {string} input.hashedOtp - The hashed OTP.
- * @param {number} input.timeStep - The time step used for OTP generation.
+ * @param {string} input.timeStep - The time step used for OTP generation.
  * @param {string} input.actionHash - The action hash.
- * @param {number} input.txNonce - The transaction nonce.
+ * @param {string} input.txNonce - The transaction nonce.
  * @returns {Object} - The proof object containing the input fields.
  */
 export async function generateProof(input) {
@@ -138,10 +148,21 @@ export async function generateProof(input) {
     }
 
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-        input,
-        "../circuits/totp_js/totp.wasm",
-        "../circuits/zkey/cardSetup/cardSetup00.zkey"
+        {
+            secret: input.secret,
+            otp_code: input.computedOtp,
+            hashed_secret: input.hashedSecret,
+            hashed_otp: input.hashedOtp,
+            time_step: input.timeStep,
+            action_hash: input.actionHash,
+            tx_nonce: input.txNonce
+        },
+        "../../circuits/totp_js/totp.wasm",
+        "../../circuits/totp_0001.zkey"
     );
+
+    await verifyProof(proof, publicSignals);
+
 
     const a = [
         decToHex(proof.pi_a[0]),
@@ -158,7 +179,7 @@ export async function generateProof(input) {
         decToHex(proof.pi_c[1])
     ];
 
-    const publicInput = pub.map(decToHex);
+    const publicInput = publicSignals.map(decToHex);
 
     const finalProofObject = {
         a,
@@ -200,4 +221,24 @@ export function decryptSecret(encryptedSecret, salt) {
     decrypted += decipher.final("utf8");
 
     return decrypted;
+}
+
+// Function to verify the proof
+async function verifyProof(proof, publicSignals) {
+    try {
+        // Read the verification key from a JSON file
+        const verificationKeyFile = '../../circuits/verification_key.json'; // Path to your verification key file
+        const verificationKey = JSON.parse(fs.readFileSync(verificationKeyFile, 'utf8'));
+
+        // Use snarkjs to verify the proof
+        const isValid = await snarkjs.groth16.verify(verificationKey, publicSignals, proof);
+
+        if (isValid) {
+            console.log("Proof is valid!");
+        } else {
+            console.log("Proof is invalid.");
+        }
+    } catch (error) {
+        console.error("Error in Verification Phase:", error);
+    }
 }
