@@ -1,0 +1,22 @@
+node_modules/
+input.json
+
+# Build artifacts
+*.r1cs
+*.sym
+*_js/
+*.wasm
+witness.wtns
+
+# Large ceremony files
+*.ptau
+*_000*.zkey
+
+# Optional if you do want to keep final zkeys around
+# but prefer ignoring intermediate ones:
+totp_0000.zkey
+totp_0001.zkey
+
+proof.json
+public.json
+verification_key.json
