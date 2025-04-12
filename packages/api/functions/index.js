@@ -66,5 +66,6 @@ export const generateProof = onRequest(async (req, res) => {
         txNonce,
     };
 
-    res.send("Proof generated!");
+    const proof = await generateProof(input);
+    res.status(200).send({ status: "ok", proof });
 });

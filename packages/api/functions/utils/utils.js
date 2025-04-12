@@ -1,6 +1,7 @@
 import * as circomlibjs from "circomlibjs";
 import { ethers } from "ethers";
 import crypto from "crypto";
+const snarkjs = require('snarkjs')
 
 
 
@@ -115,4 +116,58 @@ export function computeTOTP6(secretBytes, timeStep) {
 
     // Return the 6-digit TOTP code
     return binCode % 1000000;
+}
+
+/**
+ * Generates a proof object from the given input parameters.
+ *
+ * @param {Object} input - The input object containing the required fields.
+ * @param {string} input.secret - The secret key.
+ * @param {number} input.computedOtp - The computed OTP.
+ * @param {string} input.hashedSecret - The hashed secret.
+ * @param {string} input.hashedOtp - The hashed OTP.
+ * @param {number} input.timeStep - The time step used for OTP generation.
+ * @param {string} input.actionHash - The action hash.
+ * @param {number} input.txNonce - The transaction nonce.
+ * @returns {Object} - The proof object containing the input fields.
+ */
+export async function generateProof(input) {
+
+    // Validate required fields from input
+    if (!input.secret || !input.computedOtp || !input.hashedSecret || !input.hashedOtp || !input.timeStep || !input.actionHash || !input.txNonce) {
+        throw new Error("Missing required fields in input");
+    }
+
+    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+        input,
+        "../circuits/totp_js/totp.wasm",
+        "../circuits/zkey/cardSetup/cardSetup00.zkey"
+    );
+
+    const a = [
+        decToHex(proof.pi_a[0]),
+        decToHex(proof.pi_a[1])
+    ];
+
+    const b = [
+        [decToHex(proof.pi_b[0][0]), decToHex(proof.pi_b[0][1])],
+        [decToHex(proof.pi_b[1][0]), decToHex(proof.pi_b[1][1])]
+    ];
+
+    const c = [
+        decToHex(proof.pi_c[0]),
+        decToHex(proof.pi_c[1])
+    ];
+
+    const input = pub.map(decToHex);
+
+    const finalProofObject = {
+        a,
+        b,
+        c,
+        input
+    };
+
+
+    return finalProofObject;
 }
