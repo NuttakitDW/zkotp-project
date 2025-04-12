@@ -17,7 +17,9 @@
     "firebase-functions": "^6.3.2"
   },
   "devDependencies": {
-    "firebase-functions-test": "^3.1.0"
+    "circom": "^0.5.46",
+    "firebase-functions-test": "^3.1.0",
+    "snarkjs": "^0.7.5"
   },
   "private": true
 }
