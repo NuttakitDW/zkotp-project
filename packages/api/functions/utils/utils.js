@@ -3,16 +3,6 @@ import { ethers } from "ethers";
 import * as snarkjs from 'snarkjs';
 import fs from 'fs';
 
-/**
- * Converts a decimal number to a hexadecimal string with a "0x" prefix.
- *
- * @param {number} num - The decimal number to convert.
- * @returns {string} - The hexadecimal representation of the number.
- */
-export function decToHex(num) {
-    return "0x" + BigInt(num).toString(16);
-}
-
 
 /**
  * Computes the Poseidon hash of the given input field.
@@ -163,31 +153,8 @@ export async function generateProof(input) {
 
     await verifyProof(proof, publicSignals);
 
-
-    const a = [
-        decToHex(proof.pi_a[0]),
-        decToHex(proof.pi_a[1])
-    ];
-
-    const b = [
-        [decToHex(proof.pi_b[0][0]), decToHex(proof.pi_b[0][1])],
-        [decToHex(proof.pi_b[1][0]), decToHex(proof.pi_b[1][1])]
-    ];
-
-    const c = [
-        decToHex(proof.pi_c[0]),
-        decToHex(proof.pi_c[1])
-    ];
-
-    const publicInput = publicSignals.map(decToHex);
-
-    const finalProofObject = {
-        a,
-        b,
-        c,
-        publicInput
-    };
-
+    const solidityCalldata = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals)
+    const finalProofObject = parseSolidityCallData(solidityCalldata);
 
     return finalProofObject;
 }
@@ -241,4 +208,28 @@ async function verifyProof(proof, publicSignals) {
     } catch (error) {
         console.error("Error in Verification Phase:", error);
     }
+}
+
+
+function parseSolidityCallData(calldataString) {
+    // e.g. "[\"0xabc\",\"0xdef\"],[[\"0x...\",\"0x...\"],[\"0x...\",\"0x...\"]],[\"0x...\",\"0x...\"],[\"0x...\",\"0x...\", ...]"
+    // 1) Remove brackets, quotes, spaces
+    const flat = calldataString.replace(/["[\]\s]/g, "");
+    // 2) Split by comma
+    const tokens = flat.split(",");
+
+    // The order is: a0, a1, b00, b01, b10, b11, c0, c1, ... public signals ...
+    // 3) Extract a, b, c
+    const a = [tokens[0], tokens[1]];
+    const b = [
+        [tokens[2], tokens[3]],
+        [tokens[4], tokens[5]]
+    ];
+    const c = [tokens[6], tokens[7]];
+
+    // 4) The rest are public signals
+    const publicInput = tokens.slice(8);
+
+    // 5) Build a final object
+    return { a, b, c, publicInput };
 }
