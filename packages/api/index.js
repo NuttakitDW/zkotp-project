@@ -3,7 +3,7 @@
  **************************************/
 import express from "express";
 import dotenv from "dotenv";
-import { createClient } from "@supabase/supabase-js";
+import admin from "firebase-admin";
 import {
     encryptWithSalt,
     decryptWithSalt,
@@ -16,21 +16,16 @@ import {
     generateZKProof,
 } from "./utils/utils.js";
 
-// Load environment variables (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, etc.)
+// Load environment variables
 dotenv.config();
 
-// 1) Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Initialize Firebase Admin SDK
+admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+});
+const db = admin.firestore();
 
-if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env");
-}
-
-console.info("Initializing Supabase client...");
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-// 2) Create Express app
+// 1) Create Express app
 const app = express();
 app.use(express.json()); // parse JSON bodies
 
@@ -43,43 +38,17 @@ app.post("/registerUser", async (req, res) => {
     console.info("Received request to /registerUser");
     try {
         const { uid, secret } = req.body;
-        console.info("Request body:", { uid, secret: secret ? "provided" : "not provided" });
 
         if (!uid || !secret) {
             console.warn("Missing uid or secret in request body.");
             return res.status(400).json({ error: "Missing uid or secret" });
         }
 
-        // Check if user already exists
-        console.info("Checking if user already exists...");
-        const { data: existingUsers, error: selectError } = await supabase
-            .from("users")
-            .select("*")
-            .eq("uid", uid);
-
-        if (selectError) {
-            console.error("Error querying existing users:", selectError);
-            throw selectError;
-        }
-        if (existingUsers.length > 0) {
-            console.warn("User already exists:", uid);
-            return res.status(400).json({ error: "User already exists" });
-        }
-
-        // Encrypt user secret
-        console.info("Encrypting user secret...");
+        // Encrypt the secret
         const encrypted_secret = encryptWithSalt(secret, uid);
 
-        // Insert new user
-        console.info("Inserting new user into database...");
-        const { error: insertError } = await supabase
-            .from("users")
-            .insert([{ uid, encrypted_secret }]);
-
-        if (insertError) {
-            console.error("Error inserting new user:", insertError);
-            throw insertError;
-        }
+        // Store encrypted_secret in Firestore
+        await db.collection("users").doc(uid).set({ encrypted_secret });
 
         console.info("User registered successfully:", uid);
         return res.status(200).json({ message: "User registered successfully" });
@@ -96,36 +65,22 @@ app.post("/generateProof", async (req, res) => {
     console.info("Received request to /generateProof");
     try {
         const { uid, otp, to, value, data } = req.body;
-        console.info("Request body:", { uid, otp, to, value, data });
 
         if (!uid || otp == null || !to || value == null || data == null) {
             console.warn("Missing required fields in request body.");
             return res.status(400).json({ error: "Missing required fields" });
         }
 
-        // Fetch user
-        console.info("Fetching user from database...");
-        const { data: foundUsers, error: userError } = await supabase
-            .from("users")
-            .select("*")
-            .eq("uid", uid)
-            .single();
-
-        if (userError) {
-            console.error("Error fetching user:", userError);
-            throw userError;
-        }
-        if (!foundUsers) {
+        // Fetch encrypted_secret from Firestore
+        const userDoc = await db.collection("users").doc(uid).get();
+        if (!userDoc.exists) {
             console.warn("User not found:", uid);
             return res.status(404).json({ error: "User not found" });
         }
+        const { encrypted_secret } = userDoc.data();
 
-        const { encrypted_secret } = foundUsers;
-        console.info("User found. Decrypting secret...");
-        const encryptedSecret = encrypted_secret;
-
-        // Decrypt user secret
-        const decryptedSecret = decryptWithSalt(encryptedSecret, uid);
+        // Decrypt the secret
+        const decryptedSecret = decryptWithSalt(encrypted_secret, uid);
 
         // Prepare secret bytes
         console.info("Preparing secret bytes...");
@@ -182,7 +137,7 @@ app.post("/generateProof", async (req, res) => {
 //=============================
 //  START SERVER
 //=============================
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080; // Use port 8080 for Google Cloud Run
 app.listen(PORT, () => {
-    console.info(`Supabase-based app listening on port ${PORT}`);
+    console.info(`App listening on port ${PORT}`);
 });
