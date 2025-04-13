@@ -3,6 +3,8 @@ import { ethers } from "ethers";
 import * as snarkjs from 'snarkjs';
 import fs from 'fs';
 import base32 from "base32.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
 /**
  * Computes the Poseidon hash of the given input field.
@@ -253,6 +255,13 @@ export async function generateZKProof(input) {
         throw new Error("Missing required fields in input");
     }
 
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+
+    // This will resolve to /usr/src/app/utils/totp.wasm inside the container
+    const wasmPath = path.join(__dirname, "totp.wasm");
+    const zkeyPath = path.join(__dirname, "totp_0001.zkey");
+
     let proof, publicSignals;
     try {
         const result = await snarkjs.groth16.fullProve(
@@ -265,8 +274,8 @@ export async function generateZKProof(input) {
                 action_hash: input.actionHash,
                 tx_nonce: input.txNonce
             },
-            process.env.TOTP_WASM_PATH,
-            process.env.TOTP_ZKEY_PATH
+            wasmPath,
+            zkeyPath
         );
         proof = result.proof;
         publicSignals = result.publicSignals;
@@ -289,8 +298,12 @@ export async function generateZKProof(input) {
 // Function to verify the proof
 async function verifyProof(proof, publicSignals) {
     // Read the verification key from a JSON file
-    const verificationKeyFile = process.env.VERIFICATION_KEY_PATH;
-    const verificationKey = JSON.parse(fs.readFileSync(verificationKeyFile, 'utf8'));
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+
+    // This will resolve to /usr/src/app/utils/totp.wasm inside the container
+    const verificationKeyPath = path.join(__dirname, "verification_key.json");
+    const verificationKey = JSON.parse(fs.readFileSync(verificationKeyPath, 'utf8'));
 
     // Use snarkjs to verify the proof
     const isValid = await snarkjs.groth16.verify(verificationKey, publicSignals, proof);
