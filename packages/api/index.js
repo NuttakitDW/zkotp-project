@@ -90,7 +90,7 @@ app.get("/user/check", async (req, res) => {
         const userDoc = await db.collection("users").doc(uid).get();
         if (userDoc.exists) {
             console.info("User found:", uid);
-            return res.status(200).json({ registered: true });
+            return res.status(200).json({ uid: uid, user_doc: userDoc.data(), registered: true });
         } else {
             console.info("User not found:", uid);
             return res.status(404).json({ registered: false });
