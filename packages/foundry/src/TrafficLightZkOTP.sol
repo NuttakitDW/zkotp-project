@@ -41,7 +41,7 @@ contract TrafficLightZkOTP {
         uint256[2] memory a,
         uint256[2][2] memory b,
         uint256[2] memory c,
-        uint256[] memory input
+        uint256[5] memory input
     ) external {
         // 1) Verify the proof against the on-chain verifier
         bool ok = verifier.verifyProof(a, b, c, input);
@@ -63,7 +63,7 @@ contract TrafficLightZkOTP {
         uint256[2] memory a,
         uint256[2][2] memory b,
         uint256[2] memory c,
-        uint256[] memory input
+        uint256[5] memory input
     ) external {
         bool ok = verifier.verifyProof(a, b, c, input);
         require(ok, "Invalid ZK proof");
