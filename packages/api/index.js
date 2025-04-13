@@ -4,6 +4,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import admin from "firebase-admin";
+import { Firestore } from "@google-cloud/firestore"
 import {
     encryptWithSalt,
     decryptWithSalt,
@@ -23,7 +24,9 @@ dotenv.config();
 admin.initializeApp({
     credential: admin.credential.applicationDefault(),
 });
-const db = admin.firestore();
+const db = new Firestore({
+    projectId: process.env.GCLOUD_PROJECT,
+});
 
 // 1) Create Express app
 const app = express();
