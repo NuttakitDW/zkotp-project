@@ -34,7 +34,7 @@ contract TrafficLightZkOTPTest is Test {
             "Verifier not set"
         );
         // Light should start off
-        assertFalse(trafficLight.isLightOn(), "Light should start off");
+        assertFalse(trafficLight.isGreenLight(), "Light should start off");
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -55,10 +55,13 @@ contract TrafficLightZkOTPTest is Test {
 
         // Call turnOn with dummy proof
         vm.prank(alice); // simulate call from `alice`
-        trafficLight.turnOn(a, b, c, input);
+        trafficLight.switchLight(a, b, c, input);
 
         // Now the light should be on
-        assertTrue(trafficLight.isLightOn(), "Light should be on after turnOn");
+        assertTrue(
+            trafficLight.isGreenLight(),
+            "Light should be on after turnOn"
+        );
     }
 
     function testTurnOnInvalidProof() public {
@@ -78,34 +81,7 @@ contract TrafficLightZkOTPTest is Test {
         vm.expectRevert(bytes("Invalid ZK proof"));
 
         vm.prank(bob);
-        trafficLight.turnOn(a, b, c, input);
-    }
-
-    // ─────────────────────────────────────────────────────────────────
-    // turnOff() Tests
-    // ─────────────────────────────────────────────────────────────────
-    function testTurnOffSuccess() public {
-        // We'll call the function with dummy data
-        uint256[2] memory a = [uint256(1), uint256(2)];
-        uint256[2][2] memory b = [
-            [uint256(3), uint256(4)],
-            [uint256(5), uint256(6)]
-        ];
-        uint256[2] memory c = [uint256(7), uint256(8)];
-        uint256[5] memory input = [uint256(9999), 0, 0, 0, 42];
-        // Turn the light on first
-        verifierMock.setShouldVerify(true);
-        vm.prank(alice);
-        trafficLight.turnOn(a, b, c, input);
-        assertTrue(trafficLight.isLightOn());
-
-        // Now turn it off
-        vm.prank(alice);
-        trafficLight.turnOff(a, b, c, input);
-        assertFalse(
-            trafficLight.isLightOn(),
-            "Light should be off after turnOff"
-        );
+        trafficLight.switchLight(a, b, c, input);
     }
 
     function testTurnOffInvalidProof() public {
@@ -122,6 +98,6 @@ contract TrafficLightZkOTPTest is Test {
 
         vm.expectRevert(bytes("Invalid ZK proof"));
         vm.prank(bob);
-        trafficLight.turnOff(a, b, c, input);
+        trafficLight.switchLight(a, b, c, input);
     }
 }
