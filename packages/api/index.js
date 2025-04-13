@@ -5,6 +5,10 @@ import express from "express";
 import dotenv from "dotenv";
 import admin from "firebase-admin";
 import { Firestore } from "@google-cloud/firestore"
+import session from "express-session";
+import passport from "passport";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import speakeasy from "speakeasy";
 import {
     encryptWithSalt,
     decryptWithSalt,
@@ -31,13 +35,84 @@ const db = new Firestore({
 // 1) Create Express app
 const app = express();
 app.use(express.json()); // parse JSON bodies
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+
+const users = {};
 
 console.info("Express app initialized.");
+//=============================
+//  TOTP SETUP
+//=============================
+// Passport Google OAuth strategy
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: "/auth/google/callback"
+}, (accessToken, refreshToken, profile, done) => {
+    // If user not in memory, create placeholder record
+    if (!users[profile.id]) {
+        users[profile.id] = {
+            id: profile.id,
+            name: profile.displayName,
+            email: profile.emails?.[0]?.value,
+            totpSecret: null // We'll fill this in if not present
+        };
+    }
+    return done(null, users[profile.id]);
+}));
+
+passport.serializeUser((user, done) => done(null, user.id));
+passport.deserializeUser((id, done) => done(null, users[id]));
+
+// ========== ROUTES ==========
+
+// 1) Google Auth endpoint
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+app.get('/auth/fail', (req, res) => {
+    res.status(401).json({ error: "Google auth failed" });
+});
+
+// 2) Google Auth callback -> generate TOTP secret if missing -> return JSON
+app.get('/auth/google/callback',
+    passport.authenticate('google', { failureRedirect: '/auth/fail' }),
+    (req, res) => {
+        // If the user doesn't have a TOTP secret, create one
+        if (!req.user.totpSecret) {
+            const secret = speakeasy.generateSecret({ name: `OTP API (${req.user.email || req.user.name})` });
+            req.user.totpSecret = secret.base32;
+        }
+
+        // Return basic user info + totpSecret in JSON
+        res.json({
+            message: "Google login successful",
+            user: {
+                id: req.user.id,
+                name: req.user.name,
+                email: req.user.email,
+                totpSecret: req.user.totpSecret // Return the TOTP secret
+            }
+        });
+    }
+);
+
+// 4) Logout route
+app.get('/logout', (req, res) => {
+    req.logout(() => {
+        res.json({ message: "Logged out" });
+    });
+});
 
 //=============================
 //  REGISTER USER
 //=============================
-app.post("/registerUser", async (req, res) => {
+app.post("/user/register", async (req, res) => {
     console.info("Received request to /registerUser");
     try {
         const { uid, secret } = req.body;
@@ -64,7 +139,7 @@ app.post("/registerUser", async (req, res) => {
 //=============================
 //  CHECK USER REGISTRATION
 //=============================
-app.get("/checkUser", async (req, res) => {
+app.get("/user/check", async (req, res) => {
     console.info("Received request to /checkUser");
     try {
         const { uid } = req.query;
@@ -92,7 +167,7 @@ app.get("/checkUser", async (req, res) => {
 //=============================
 //  GENERATE PROOF
 //=============================
-app.post("/generateProof", async (req, res) => {
+app.post("/proof/generate", async (req, res) => {
     console.info("Received request to /generateProof");
     try {
         const { uid, otp, to, value, data } = req.body;
