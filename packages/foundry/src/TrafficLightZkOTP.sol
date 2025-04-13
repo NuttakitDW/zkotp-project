@@ -15,6 +15,9 @@ contract TrafficLightZkOTP {
     /// @notice The traffic light state: false = off/red, true = on/green.
     bool public greenLight;
 
+    /// @notice Tracks used tx_nonces to prevent replay attacks.
+    mapping(uint256 => bool) public usedNonces;
+
     /// @notice The verifier contract (Groth16 or Plonk).
     IVerifier public verifier;
 
@@ -50,6 +53,10 @@ contract TrafficLightZkOTP {
         uint256[2] memory c,
         uint256[5] memory input
     ) external {
+        uint256 txNonce = input[4];
+        require(!usedNonces[txNonce], "Nonce already used");
+        usedNonces[txNonce] = true;
+
         // 1) Verify the proof against the on-chain verifier
         bool ok = verifier.verifyProof(a, b, c, input);
         require(ok, "Invalid ZK proof");
