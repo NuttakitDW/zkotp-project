@@ -59,6 +59,34 @@ app.post("/registerUser", async (req, res) => {
 });
 
 //=============================
+//  CHECK USER REGISTRATION
+//=============================
+app.get("/checkUser", async (req, res) => {
+    console.info("Received request to /checkUser");
+    try {
+        const { uid } = req.query;
+
+        if (!uid) {
+            console.warn("Missing uid in request query.");
+            return res.status(400).json({ error: "Missing uid" });
+        }
+
+        // Check if user exists in Firestore
+        const userDoc = await db.collection("users").doc(uid).get();
+        if (userDoc.exists) {
+            console.info("User found:", uid);
+            return res.status(200).json({ registered: true });
+        } else {
+            console.info("User not found:", uid);
+            return res.status(404).json({ registered: false });
+        }
+    } catch (err) {
+        console.error("Error in /checkUser:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+//=============================
 //  GENERATE PROOF
 //=============================
 app.post("/generateProof", async (req, res) => {
