@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import admin from "firebase-admin";
 import { Firestore } from "@google-cloud/firestore"
 import speakeasy from "speakeasy";
+import qrcode from "qrcode";
 
 import {
     encryptWithSalt,
@@ -39,8 +40,8 @@ console.info("Express app initialized.");
 //=============================
 //  USER
 //=============================
-app.get("/user/check", async (req, res) => {
-    console.info("Received request to /checkUser");
+app.get("/user", async (req, res) => {
+    console.info("Received request to /user");
     try {
         const { uid } = req.query;
 
@@ -59,7 +60,7 @@ app.get("/user/check", async (req, res) => {
             return res.status(404).json({ registered: false });
         }
     } catch (err) {
-        console.error("Error in /user/check:", err);
+        console.error("Error in /user:", err);
         return res.status(500).json({ error: "Internal Server Error" });
     }
 });
@@ -94,11 +95,23 @@ app.post("/user/register", async (req, res) => {
 app.post("/proof/generate", async (req, res) => {
     console.info("Received request to /proof/generate");
     try {
-        const { uid, otp, to, value, data } = req.body;
+        let { uid, otp, to, value, data } = req.body;
 
-        if (!uid || otp == null || !to || value == null || data == null) {
+        // Set defaults if missing:
+        if (!to) {
+            to = "0x0000000000000000000000000000000000000000";
+        }
+        if (value == null) {
+            value = 0;
+        }
+        if (!data) {
+            data = "0x00";
+        }
+
+        // Check required fields
+        if (!uid || otp == null) {
             console.warn("Missing required fields in request body.");
-            return res.status(400).json({ error: "Missing required fields" });
+            return res.status(400).json({ error: "Missing required fields (uid or otp)" });
         }
 
         // Fetch encrypted_secret from Firestore
@@ -165,29 +178,34 @@ app.post("/proof/generate", async (req, res) => {
 });
 
 
+
 //=============================
 //  OTP
 //=============================
-app.post("/otp/secret/generate", (req, res) => {
-    console.info("Received request to /otp/generate-secret");
+// Then in your Express route:
+app.post("/otp/create", (req, res) => {
+    console.info("Received request to /otp/create");
     try {
-
-        if (!name) {
-            console.warn("Missing name in request body.");
-            return res.status(400).json({ error: "Missing name" });
-        }
-
         const secret = speakeasy.generateSecret({
-            name: `zkotp`,
+            name: "zkotp", // or any label you want displayed in authenticator apps
         });
 
-        console.info("Secret generated successfully.");
-        return res.status(200).json({
-            base32: secret.base32,
-            otpauth_url: secret.otpauth_url,
+        // Convert the otpauth_url into a QR code data URL
+        qrcode.toDataURL(secret.otpauth_url, (err, dataUrl) => {
+            if (err) {
+                console.error("Error generating QR code:", err);
+                return res.status(500).json({ error: "Internal Server Error" });
+            }
+
+            console.info("Secret & QR code generated successfully.");
+            return res.status(200).json({
+                base32: secret.base32,
+                otpauth_url: secret.otpauth_url,
+                qr_code_url: dataUrl
+            });
         });
     } catch (err) {
-        console.error("Error in /otp/generate-secret:", err);
+        console.error("Error in /otp/create:", err);
         return res.status(500).json({ error: "Internal Server Error" });
     }
 });
