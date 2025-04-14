@@ -35,14 +35,6 @@ const db = new Firestore({
 // 1) Create Express app
 const app = express();
 app.use(express.json()); // parse JSON bodies
-app.use(session({
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false
-}));
-app.use(passport.initialize());
-app.use(passport.session());
-
 
 console.info("Express app initialized.");
 
