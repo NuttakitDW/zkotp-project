@@ -30,10 +30,6 @@ export async function computePoseidonHash(xField) {
  * @returns {string} - The keccak256 hash of the packed parameters as a hexadecimal string.
  */
 export function computeActionHash(to, value, data) {
-    // Use ethers.utils.solidityPack to mimic abi.encodePacked
-    if (!to || !value || !data) {
-        throw new Error("Invalid input: 'to', 'value', and 'data' must be non-empty.");
-    }
 
     if (!ethers.utils.isAddress(to)) {
         throw new Error(`Invalid Ethereum address: ${to}`);
