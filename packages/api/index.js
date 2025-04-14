@@ -5,8 +5,6 @@ import express from "express";
 import dotenv from "dotenv";
 import admin from "firebase-admin";
 import { Firestore } from "@google-cloud/firestore"
-import session from "express-session";
-import passport from "passport";
 import speakeasy from "speakeasy";
 
 import {
@@ -39,34 +37,7 @@ app.use(express.json()); // parse JSON bodies
 console.info("Express app initialized.");
 
 //=============================
-//  REGISTER USER
-//=============================
-app.post("/user/register", async (req, res) => {
-    console.info("Received request to /registerUser");
-    try {
-        const { uid, secret } = req.body;
-
-        if (!uid || !secret) {
-            console.warn("Missing uid or secret in request body.");
-            return res.status(400).json({ error: "Missing uid or secret" });
-        }
-
-        // Encrypt the secret
-        const encrypted_secret = encryptWithSalt(secret, uid);
-
-        // Store encrypted_secret in Firestore
-        await db.collection("users").doc(uid).set({ encrypted_secret });
-
-        console.info("User registered successfully:", uid);
-        return res.status(200).json({ message: "User registered successfully" });
-    } catch (err) {
-        console.error("Error in /user/register:", err);
-        return res.status(500).json({ error: "Internal Server Error" });
-    }
-});
-
-//=============================
-//  CHECK USER REGISTRATION
+//  USER
 //=============================
 app.get("/user/check", async (req, res) => {
     console.info("Received request to /checkUser");
@@ -89,6 +60,30 @@ app.get("/user/check", async (req, res) => {
         }
     } catch (err) {
         console.error("Error in /user/check:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+app.post("/user/register", async (req, res) => {
+    console.info("Received request to /registerUser");
+    try {
+        const { uid, secret } = req.body;
+
+        if (!uid || !secret) {
+            console.warn("Missing uid or secret in request body.");
+            return res.status(400).json({ error: "Missing uid or secret" });
+        }
+
+        // Encrypt the secret
+        const encrypted_secret = encryptWithSalt(secret, uid);
+
+        // Store encrypted_secret in Firestore
+        await db.collection("users").doc(uid).set({ encrypted_secret });
+
+        console.info("User registered successfully:", uid);
+        return res.status(200).json({ message: "User registered successfully" });
+    } catch (err) {
+        console.error("Error in /user/register:", err);
         return res.status(500).json({ error: "Internal Server Error" });
     }
 });
@@ -169,6 +164,34 @@ app.post("/proof/generate", async (req, res) => {
     }
 });
 
+
+//=============================
+//  OTP
+//=============================
+app.post("/otp/secret/generate", (req, res) => {
+    console.info("Received request to /otp/generate-secret");
+    try {
+
+        if (!name) {
+            console.warn("Missing name in request body.");
+            return res.status(400).json({ error: "Missing name" });
+        }
+
+        const secret = speakeasy.generateSecret({
+            name: `zkotp`,
+        });
+
+        console.info("Secret generated successfully.");
+        return res.status(200).json({
+            base32: secret.base32,
+            otpauth_url: secret.otpauth_url,
+        });
+    } catch (err) {
+        console.error("Error in /otp/generate-secret:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
 app.post("/otp/verify", async (req, res) => {
     console.info("Received request to /otp/verify");
     try {
@@ -195,7 +218,7 @@ app.post("/otp/verify", async (req, res) => {
             secret: secret,
             encoding: "base32",
             token: otp,
-            window: 1, // optional to allow 1 time-step offset
+            window: 1,
         });
 
         if (match) {
