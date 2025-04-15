@@ -7,6 +7,7 @@ import admin from "firebase-admin";
 import { Firestore } from "@google-cloud/firestore"
 import speakeasy from "speakeasy";
 import qrcode from "qrcode";
+import cors from "cors";
 
 import {
     encryptWithSalt,
@@ -34,6 +35,7 @@ const db = new Firestore({
 // 1) Create Express app
 const app = express();
 app.use(express.json()); // parse JSON bodies
+app.use(cors());
 
 console.info("Express app initialized.");
 
@@ -183,7 +185,7 @@ app.post("/proof/generate", async (req, res) => {
 //  OTP
 //=============================
 // Then in your Express route:
-app.post("/otp/create", (req, res) => {
+app.get("/otp/create", (req, res) => {
     console.info("Received request to /otp/create");
     try {
         const secret = speakeasy.generateSecret({

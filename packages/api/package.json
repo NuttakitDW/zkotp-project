@@ -12,6 +12,7 @@
   "dependencies": {
     "base32.js": "^0.1.0",
     "circomlibjs": "^0.1.7",
+    "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "express-session": "^1.17.3",
