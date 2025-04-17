@@ -340,3 +340,4 @@ export function base32Decode(b32str) {
     const decoder = new base32.Decoder();
     return new Uint8Array(decoder.write(b32str).finalize());
 }
+

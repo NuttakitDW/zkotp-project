@@ -18,7 +18,7 @@ import {
     computePoseidonHash,
     computeActionHash,
     computeTOTP6,
-    generateZKProof,
+    generateZKProof
 } from "./utils/utils.js";
 
 // Load environment variables
@@ -32,6 +32,9 @@ const db = new Firestore({
     projectId: process.env.GCLOUD_PROJECT,
 });
 
+// Mapping of uid to secret
+const uidToSecretMap = new Map();
+
 // 1) Create Express app
 const app = express();
 app.use(express.json()); // parse JSON bodies
@@ -44,6 +47,7 @@ console.info("Express app initialized.");
 //=============================
 app.get("/user", async (req, res) => {
     console.info("Received request to /user");
+    return res.status(501).json({ error: "Not Implemented" });
     try {
         const { uid } = req.query;
 
@@ -81,7 +85,7 @@ app.post("/user/register", async (req, res) => {
         const encrypted_secret = encryptWithSalt(secret, uid);
 
         // Store encrypted_secret in Firestore
-        await db.collection("users").doc(uid).set({ encrypted_secret });
+        addUidToSecret(uid, encrypted_secret);
 
         console.info("User registered successfully:", uid);
         return res.status(200).json({ message: "User registered successfully" });
@@ -116,13 +120,12 @@ app.post("/proof/generate", async (req, res) => {
             return res.status(400).json({ error: "Missing required fields (uid or otp)" });
         }
 
-        // Fetch encrypted_secret from Firestore
-        const userDoc = await db.collection("users").doc(uid).get();
-        if (!userDoc.exists) {
-            console.warn("User not found:", uid);
+        // Fetch encrypted_secret from in-memory mapping
+        const encrypted_secret = getSecretByUid(uid);
+        if (!encrypted_secret) {
+            console.warn("User not found in mapping:", uid);
             return res.status(404).json({ error: "User not found" });
         }
-        const { encrypted_secret } = userDoc.data();
 
         // Decrypt the secret
         const decryptedSecret = decryptWithSalt(encrypted_secret, uid);
@@ -222,13 +225,12 @@ app.post("/otp/verify", async (req, res) => {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
-        // Fetch encrypted_secret from Firestore
-        const userDoc = await db.collection("users").doc(uid).get();
-        if (!userDoc.exists) {
-            console.warn("User not found:", uid);
+        // Fetch encrypted_secret from in-memory mapping
+        const encrypted_secret = getSecretByUid(uid);
+        if (!encrypted_secret) {
+            console.warn("User not found in mapping:", uid);
             return res.status(404).json({ error: "User not found" });
         }
-        const { encrypted_secret } = userDoc.data();
 
         // Decrypt the secret
         const secret = decryptWithSalt(encrypted_secret, uid);
@@ -262,3 +264,13 @@ app.listen(PORT, () => {
     console.info(`App listening on port ${PORT}`);
 });
 
+// Function to add a mapping
+function addUidToSecret(uid, secret) {
+    uidToSecretMap.set(uid, secret);
+    console.info(`Mapping added: ${uid} -> ${secret}`);
+}
+
+// Function to get a secret by uid
+function getSecretByUid(uid) {
+    return uidToSecretMap.get(uid);
+}
